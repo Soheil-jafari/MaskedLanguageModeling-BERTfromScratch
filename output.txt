@@ -1,0 +1,6 @@
+Input: The capital of France is [MASK].
+Output: The capital of France is Paris.
+Input: The [MASK] barks loudly.
+Output: The dog barks loudly.
+Input: She went to the [MASK] to buy groceries.
+Output: She went to the store to buy groceries.
