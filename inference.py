@@ -1,44 +1,49 @@
 # inference.py
 import torch
-from model import MaskedLanguageModel
-from tokenizer import Tokenizer
+from discriminator import Discriminator
+from tokenizer import get_tokenizer
 from config import config
 
+def predict_replaced(text, discriminator, tokenizer):
+    discriminator.eval()
+    
+    # Manually corrupt the text for demonstration
+    tokens = tokenizer.encode(text).tokens
+    token_ids = tokenizer.encode(text).ids
+    
+    # Replace a token with a plausible but incorrect alternative
+    if "king" in tokens:
+        king_idx = tokens.index("king")
+        tokens[king_idx] = "queen"
+        token_ids = tokenizer.encode(" ".join(tokens)).ids
 
-def predict_mask(text, model, tokenizer):
-    model.eval()
-    tokens = tokenizer.tokenize(text)
-    input_ids = tokenizer.convert_tokens_to_ids(tokens)
-
-    if config.mask_token_id not in input_ids:
-        print("No [MASK] token found in input text.")
-        return text
-
-    input_tensor = torch.tensor(input_ids).unsqueeze(0).to(config.device)
+    input_tensor = torch.tensor([token_ids], dtype=torch.long).to(config.device)
+    
     with torch.no_grad():
-        logits = model(input_tensor)
+        logits = discriminator(input_tensor)
+        probs = torch.sigmoid(logits).squeeze()
 
-    predicted_ids = logits.argmax(dim=-1).squeeze().tolist()
-    predicted_tokens = tokenizer.convert_ids_to_tokens(predicted_ids)
-
-    reconstructed = []
-    for orig, pred in zip(tokens, predicted_tokens):
-        if orig == '[MASK]':
-            reconstructed.append(pred)
-        else:
-            reconstructed.append(orig)
-
-    return tokenizer.detokenize(reconstructed)
-
+    print("Input Text:", " ".join(tokens))
+    print("-" * 30)
+    print("Token\t\tIs_Replaced_Prob")
+    print("-" * 30)
+    for token, prob in zip(tokens, probs):
+        print(f"{token:<15}\t{prob.item():.4f}")
 
 if __name__ == '__main__':
-    tokenizer = Tokenizer()
-    tokenizer.build_vocab(config.train_text_path)
+    tokenizer = get_tokenizer()
+    
+    discriminator = Discriminator().to(config.device)
+    
+    # Load the trained discriminator checkpoint
+    # Make sure to change the epoch number to the one you want to use
+    checkpoint_path = os.path.join(config.model_save_path, f"discriminator_epoch_{config.num_epochs}.pt")
+    if os.path.exists(checkpoint_path):
+        discriminator.load_state_dict(torch.load(checkpoint_path, map_location=config.device))
+        print("Loaded discriminator from checkpoint.")
+    else:
+        print("Could not find a trained discriminator checkpoint. Please train the model first.")
+        exit()
 
-    model = MaskedLanguageModel(config).to(config.device)
-    checkpoint_path = f"{config.model_save_path}/model_epoch{config.num_epochs}.pt"
-    model.load_state_dict(torch.load(checkpoint_path, map_location=config.device))
-
-    test_text = "The capital of France is [MASK]."
-    output = predict_mask(test_text, model, tokenizer)
-    print("Predicted Text:", output)
+    test_text = "The king is a powerful ruler."
+    predict_replaced(test_text, discriminator, tokenizer)
