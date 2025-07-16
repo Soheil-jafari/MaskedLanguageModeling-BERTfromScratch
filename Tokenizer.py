@@ -1,47 +1,43 @@
 # tokenizer.py
-import json
-import re
-from collections import Counter
+from tokenizers import Tokenizer
+from tokenizers.models import BPE
+from tokenizers.trainers import BpeTrainer
+from tokenizers.pre_tokenizers import Whitespace
+from config import config
+import os
 
-class Tokenizer:
-    def __init__(self, vocab_path=None):
-        self.special_tokens = ["[PAD]", "[CLS]", "[SEP]", "[MASK]", "[UNK]"]
-        self.vocab = {}
-        self.inv_vocab = {}
-        if vocab_path:
-            self.load_vocab(vocab_path)
+def train_tokenizer(files):
+    """
+    Trains a BPE tokenizer on a list of files and saves it to disk.
+    """
+    tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
+    tokenizer.pre_tokenizer = Whitespace()
+    
+    trainer = BpeTrainer(special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"], vocab_size=config.vocab_size)
+    
+    tokenizer.train(files, trainer)
+    
+    # Save the tokenizer
+    os.makedirs(os.path.dirname(config.tokenizer_path), exist_ok=True)
+    tokenizer.save(config.tokenizer_path)
 
-    def build_vocab(self, texts, vocab_size=30522):
-        word_freq = Counter()
-        for line in texts:
-            tokens = self.tokenize(line)
-            word_freq.update(tokens)
+    return tokenizer
 
-        most_common = word_freq.most_common(vocab_size - len(self.special_tokens))
-        self.vocab = {tok: i for i, tok in enumerate(self.special_tokens)}
-        for word, _ in most_common:
-            self.vocab[word] = len(self.vocab)
-
-        self.inv_vocab = {i: t for t, i in self.vocab.items()}
-
-    def save_vocab(self, path):
-        with open(path, 'w') as f:
-            json.dump(self.vocab, f)
-
-    def load_vocab(self, path):
-        with open(path, 'r') as f:
-            self.vocab = json.load(f)
-        self.inv_vocab = {int(i): t for t, i in self.vocab.items()}
-
-    def tokenize(self, text):
-        return re.findall(r"\w+|[^\w\s]", text.lower())
-
-    def encode(self, text):
-        tokens = ["[CLS]"] + self.tokenize(text)[:126] + ["[SEP]"]
-        token_ids = [self.vocab.get(tok, self.vocab["[UNK]"]) for tok in tokens]
-        padding = [self.vocab["[PAD]"]] * (128 - len(token_ids))
-        return token_ids + padding
-
-    def decode(self, token_ids):
-        tokens = [self.inv_vocab.get(i, "[UNK]") for i in token_ids]
-        return " ".join(tokens).replace(" [PAD]", "").strip()
+def get_tokenizer():
+    """
+    Loads a pre-trained tokenizer from disk, or trains a new one if it doesn't exist.
+    """
+    if os.path.exists(config.tokenizer_path):
+        return Tokenizer.from_file(config.tokenizer_path)
+    else:
+        print("Training a new tokenizer...")
+        with open(config.dataset_path, "r", encoding="utf-8") as f:
+            # Create a temporary file with the text for the tokenizer to read
+            temp_file = "temp_tokenizer_train_data.txt"
+            with open(temp_file, "w", encoding="utf-8") as temp_f:
+                for line in f:
+                    temp_f.write(line)
+        
+        tokenizer = train_tokenizer([temp_file])
+        os.remove(temp_file) # clean up temporary file
+        return tokenizer
