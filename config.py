@@ -2,7 +2,8 @@
 
 class Config:
     def __init__(self):
-        self.vocab_size = 30522  # Like BERT base
+        # General Model Config
+        self.vocab_size = 30522
         self.max_seq_len = 128
         self.hidden_dim = 256
         self.num_heads = 4
@@ -10,63 +11,31 @@ class Config:
         self.ffn_dim = 1024
         self.dropout = 0.1
 
+        # Generator-specific Config (smaller than the discriminator)
+        self.generator_hidden_dim = 64
+        self.generator_num_layers = 2
+        self.generator_num_heads = 2
+        self.generator_ffn_dim = 256
+
+
+        # Pre-training Config
         self.mask_prob = 0.15
         self.batch_size = 32
-        self.num_epochs = 10
+        self.num_epochs = 20 # Increased epochs for better convergence
         self.learning_rate = 5e-4
+        self.warmup_steps = 1000
+        self.max_grad_norm = 1.0
 
-        self.device = 'cuda'  # Use 'cpu' if you don’t have a GPU
+        # ELECTRA-specific Loss Weights
+        self.generator_weight = 1.0
+        self.discriminator_weight = 50.0
+
+        # Environment & Paths
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.print_freq = 100
-
-        self.model_save_path = "bert_masked_model.pth"
-        self.tokenizer_path = "vocab.json"
+        self.model_save_path = "electra_model"
+        self.tokenizer_path = "bpe_tokenizer.json"
         self.dataset_path = "wikitext-2.txt"
 
-
-# tokenizer.py
-import json
-import re
-from collections import Counter
-
-class Tokenizer:
-    def __init__(self, vocab_path=None):
-        self.special_tokens = ["[PAD]", "[CLS]", "[SEP]", "[MASK]", "[UNK]"]
-        self.vocab = {}
-        self.inv_vocab = {}
-        if vocab_path:
-            self.load_vocab(vocab_path)
-
-    def build_vocab(self, texts, vocab_size=30522):
-        word_freq = Counter()
-        for line in texts:
-            tokens = self.tokenize(line)
-            word_freq.update(tokens)
-
-        most_common = word_freq.most_common(vocab_size - len(self.special_tokens))
-        self.vocab = {tok: i for i, tok in enumerate(self.special_tokens)}
-        for word, _ in most_common:
-            self.vocab[word] = len(self.vocab)
-
-        self.inv_vocab = {i: t for t, i in self.vocab.items()}
-
-    def save_vocab(self, path):
-        with open(path, 'w') as f:
-            json.dump(self.vocab, f)
-
-    def load_vocab(self, path):
-        with open(path, 'r') as f:
-            self.vocab = json.load(f)
-        self.inv_vocab = {int(i): t for t, i in self.vocab.items()}
-
-    def tokenize(self, text):
-        return re.findall(r"\w+|[^\w\s]", text.lower())
-
-    def encode(self, text):
-        tokens = ["[CLS]"] + self.tokenize(text)[:126] + ["[SEP]"]
-        token_ids = [self.vocab.get(tok, self.vocab["[UNK]"]) for tok in tokens]
-        padding = [self.vocab["[PAD]"]] * (128 - len(token_ids))
-        return token_ids + padding
-
-    def decode(self, token_ids):
-        tokens = [self.inv_vocab.get(i, "[UNK]") for i in token_ids]
-        return " ".join(tokens).replace(" [PAD]", "").strip()
+# Create a single instance of the config
+config = Config()
