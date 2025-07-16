@@ -63,4 +63,4 @@ python inference.py
 
 ## ✅ Author
 Built, tested, and run locally by Hiroki Kurano.
-Fully custom and independently implemented for research and PhD-level demonstration.# MaskedLanguageModeling-BERTfromScratch
+Fully custom and independently implemented for research and Maters-level demonstration.# MaskedLanguageModeling-BERTfromScratch
